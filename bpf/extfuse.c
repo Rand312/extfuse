@@ -41,6 +41,7 @@
 	BPF_MAP_TYPE_PERCPU_HASH: each CPU core gets its own hash-table.
 	BPF_MAP_TYPE_LRU_PERCPU_HASH: all cores share one hash-table but have they own LRU structures of the table.
 */
+//创建两个 map，一个用来缓存 attr 一个用来缓存 dentry
 struct bpf_map_def SEC("maps") entry_map = {
 	.type			= BPF_MAP_TYPE_HASH,	// simple hash list
 	.key_size		= sizeof(lookup_entry_key_t),
@@ -59,6 +60,7 @@ struct bpf_map_def SEC("maps") attr_map = {
 };
 
 /* BPF_MAP_TYPE_PROG_ARRAY must ALWAYS be the last one */
+// 为么一个 handler 都要缓存一个 项 在 ebpf map
 struct bpf_map_def SEC("maps") handlers = {
    .type = BPF_MAP_TYPE_PROG_ARRAY,
    .key_size = sizeof(u32),
@@ -66,19 +68,26 @@ struct bpf_map_def SEC("maps") handlers = {
    .max_entries = FUSE_OPS_COUNT << 1,
 };
 
+// 定义主函数
 int SEC("extfuse") fuse_xdp_main_handler(void *ctx)
 {
+	//将ctx 转换为 extfuse_req
     struct extfuse_req *args = (struct extfuse_req *)ctx;
+	// 从中取出 opcode
     int opcode = (int)args->in.h.opcode;
 
     PRINTK("Opcode %d\n", opcode);
 
+	// 根据 opcode 调用具体的 handler 来处理
 	bpf_tail_call(ctx, &handlers, opcode);
 	return UPCALL;
 }
 
+// gen_entry_key(ctx, IN_PARAM_0_VALUE, "LOOKUP", &key);
+
 static int gen_entry_key(void *ctx, int param, const char *op, lookup_entry_key_t *key)
 {
+	//调用 bpf call，从 ctx 中读取 nodeid 到 key->nodeid
 	int64_t ret = bpf_extfuse_read_args(ctx, NODEID, &key->nodeid, sizeof(u64));
 	if (ret < 0) {
 		PRINTK("%s: Failed to read nodeid: %d!\n", op, ret);
@@ -134,6 +143,7 @@ static void create_lookup_entry(struct fuse_entry_out *out,
 	}
 }
 
+// ebpf lookup handler
 HANDLER(FUSE_LOOKUP)(void *ctx)
 {
 	struct extfuse_req *args = (struct extfuse_req *)ctx;
@@ -152,12 +162,14 @@ HANDLER(FUSE_LOOKUP)(void *ctx)
 	lookup_entry_key_t key = {0, {0}};
 
 	memset(key.name, 0, NAME_MAX);
+	//对于 lookup 操作哦，in.args[0].value = “name”
+	//这里获取的 key 就是从 ctx 中获取 nodeid 和 in.args[0].value
 	ret = gen_entry_key(ctx, IN_PARAM_0_VALUE, "LOOKUP", &key);
 	if (ret < 0)
 		return UPCALL;
 
 	//PRINTK("key name: %s nodeid: 0x%llx\n", key.name, key.nodeid);
-	
+	// 根据 key 查找一个 entry
 	lookup_entry_val_t *entry = bpf_map_lookup_elem(&entry_map, &key);
 	if (!entry || entry->stale) {
 		if (entry && entry->stale)

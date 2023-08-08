@@ -1,0 +1,1 @@
+cmd_/home/rand/rand/fuse/extfuse/Module.symvers := sed 's/\.ko$$/\.o/' /home/rand/rand/fuse/extfuse/modules.order | scripts/mod/modpost -m -a  -o /home/rand/rand/fuse/extfuse/Module.symvers -e -i Module.symvers   -T -

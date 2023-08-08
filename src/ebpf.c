@@ -30,6 +30,8 @@
 #endif
 #define ERROR(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 
+//lo->ebpf_ctxt = ebpf_init("/tmp/extfuse.o");
+//里面编译的 ebpf 字节码
 ebpf_context_t* ebpf_init(char *filename)
 {
 	int i;
@@ -46,7 +48,7 @@ ebpf_context_t* ebpf_init(char *filename)
 		ERROR("Failed to allocate memory\n");
 		goto err;
 	}
-
+	//加载ebpf-fuse字节码
     if (load_bpf_file(filename)) {
 		ERROR("Failed to load bpf file %s: %s\n",
 				filename, strerror(errno));
